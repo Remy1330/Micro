@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#00d4aa">
+<meta name="description" content="Calculadora de costos operativos para viajes de transporte con flota mixta.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FlotaCost">
+<title>FlotaCost — Calculadora de Viajes</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1923;--surface:#17232f;--surface2:#1e2f3e;--surface3:#243647;
+  --accent:#00d4aa;--accent2:#ff6b35;--accent3:#ffd166;
+  --text:#e8f4f0;--muted:#7a9aad;--border:#2a3f52;
+  --danger:#ff4757;--success:#00d4aa;
+  --safe-top: env(safe-area-inset-top);
+  --safe-bottom: env(safe-area-inset-bottom);
+}
+
+html{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-size:16px;min-height:100vh;-webkit-text-size-adjust:100%}
+body{min-height:100vh;background:var(--bg);padding-bottom:var(--safe-bottom)}
+
+/* ─── HEADER ─── */
+.header{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:0 1.5rem;padding-top:var(--safe-top);
+  height:calc(56px + var(--safe-top));
+  display:flex;align-items:flex-end;justify-content:space-between;
+  position:sticky;top:0;z-index:200;
+  padding-bottom:12px;
+}
+.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:1.15rem;letter-spacing:-0.02em;color:var(--text)}
+.logo span{color:var(--accent)}
+.header-right{display:flex;align-items:center;gap:10px}
+.badge{background:var(--accent);color:#0a1a14;font-size:10px;font-weight:700;padding:3px 9px;border-radius:99px;font-family:'DM Mono',monospace;letter-spacing:0.05em}
+.install-btn{background:var(--surface2);border:1px solid var(--border);color:var(--accent3);font-size:12px;font-family:'DM Mono',monospace;padding:5px 12px;border-radius:99px;cursor:pointer;display:none;transition:all .15s}
+.install-btn:hover{border-color:var(--accent3);background:#ffd16612}
+
+/* ─── OFFLINE BANNER ─── */
+.offline-bar{background:#ff475718;border-bottom:1px solid #ff475740;padding:6px 1.5rem;font-size:12px;font-family:'DM Mono',monospace;color:var(--danger);display:none;align-items:center;gap:8px}
+.offline-bar.show{display:flex}
+
+/* ─── MOBILE TABS ─── */
+.mobile-tabs{display:none;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:calc(56px + var(--safe-top));z-index:190}
+.tab-row{display:grid;grid-template-columns:1fr 1fr}
+.tab-btn{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:12px;font-size:12px;font-family:'DM Mono',monospace;cursor:pointer;transition:all .15s;text-align:center}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* ─── LAYOUT ─── */
+.app{display:grid;grid-template-columns:360px 1fr;min-height:calc(100vh - 56px)}
+.sidebar{background:var(--surface);border-right:1px solid var(--border);padding:1.5rem;overflow-y:auto;display:flex;flex-direction:column;gap:1.5rem}
+.main{padding:1.5rem;display:flex;flex-direction:column;gap:1.5rem;overflow-y:auto;background:var(--bg)}
+
+/* ─── SECTION LABEL ─── */
+.section-label{font-family:'Syne',sans-serif;font-weight:700;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:0.75rem;display:flex;align-items:center;gap:8px}
+.section-label::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* ─── INPUTS ─── */
+.field{margin-bottom:0.875rem}
+.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-family:'DM Mono',monospace}
+.field input,.field select{
+  width:100%;background:var(--surface2);border:1px solid var(--border);
+  color:var(--text);padding:10px 12px;border-radius:8px;font-size:14px;
+  font-family:'Inter',sans-serif;transition:border-color .15s;
+  -webkit-appearance:none;appearance:none;
+}
+.field input:focus,.field select:focus{outline:none;border-color:var(--accent)}
+.field input::placeholder{color:var(--muted)}
+.field select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a9aad' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
+.field select option{background:var(--surface2)}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* ─── ROUTE STOPS ─── */
+.stop-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.stop-row input{flex:1;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;font-size:13px;font-family:'Inter',sans-serif;-webkit-appearance:none}
+.stop-row input:focus{outline:none;border-color:var(--accent)}
+.stop-dot{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-family:'DM Mono',monospace;flex-shrink:0}
+.dot-origin{background:#00d4aa22;color:var(--accent);border:1.5px solid var(--accent)}
+.dot-waypoint{background:#ffd16622;color:var(--accent3);border:1.5px solid var(--accent3)}
+.dot-dest{background:#ff6b3522;color:var(--accent2);border:1.5px solid var(--accent2)}
+
+.btn-sm{background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-family:'DM Mono',monospace;transition:all .15s}
+.btn-sm:hover{border-color:var(--accent3);color:var(--accent3)}
+.btn-sm:active{transform:scale(0.97)}
+.btn-del{background:transparent;border:1px solid #ff475733;color:var(--danger);width:30px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;transition:all .15s;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.btn-del:hover{background:#ff475718;border-color:var(--danger)}
+.btn-del:active{transform:scale(0.9)}
+
+/* ─── MAP BUTTON ─── */
+.btn-map{
+  width:100%;background:var(--accent);color:#0a1a14;border:none;
+  padding:12px;border-radius:10px;font-family:'Syne',sans-serif;
+  font-weight:700;font-size:14px;letter-spacing:0.05em;cursor:pointer;
+  transition:all .15s;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:8px;
+}
+.btn-map:hover{filter:brightness(1.1)}
+.btn-map:active{transform:scale(0.98)}
+.btn-map:disabled{opacity:0.5;cursor:not-allowed}
+
+/* ─── ROUNDTRIP TOGGLE ─── */
+.roundtrip-section{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px}
+.roundtrip-header{display:flex;justify-content:space-between;align-items:center}
+.roundtrip-label{font-size:13px;color:var(--text);font-family:'Syne',sans-serif;font-weight:600}
+.toggle{position:relative;width:40px;height:22px;display:inline-block;cursor:pointer}
+.toggle input{opacity:0;width:0;height:0;position:absolute}
+.toggle-track{position:absolute;inset:0;background:var(--border);border-radius:99px;transition:.2s}
+.toggle input:checked + .toggle-track{background:var(--accent)}
+.toggle-thumb{position:absolute;top:3px;left:3px;width:16px;height:16px;background:white;border-radius:50%;transition:.2s;pointer-events:none}
+.toggle input:checked ~ .toggle-thumb{transform:translateX(18px)}
+.roundtrip-info{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-top:8px}
+
+/* ─── SLIDER ─── */
+.slider-wrap{margin-bottom:0.5rem}
+.slider-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.slider-header label{font-size:12px;color:var(--muted);font-family:'DM Mono',monospace}
+.slider-val{font-family:'DM Mono',monospace;font-size:14px;color:var(--accent3);font-weight:500}
+input[type=range]{width:100%;-webkit-appearance:none;height:4px;border-radius:4px;background:var(--border);outline:none;cursor:pointer;accent-color:var(--accent3)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--accent3);cursor:pointer;border:2px solid var(--bg)}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--accent3);cursor:pointer;border:2px solid var(--bg)}
+
+/* ─── CALC BUTTON ─── */
+.btn-calc{
+  width:100%;background:var(--accent);color:#0a1a14;border:none;
+  padding:14px;border-radius:10px;font-family:'Syne',sans-serif;
+  font-weight:800;font-size:15px;letter-spacing:0.05em;cursor:pointer;
+  transition:all .15s;text-transform:uppercase;
+}
+.btn-calc:hover{filter:brightness(1.1)}
+.btn-calc:active{transform:scale(0.98)}
+
+/* ─── RESULTS ─── */
+.result-hero{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.5rem;position:relative;overflow:hidden}
+.result-hero::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),var(--accent2),var(--accent3))}
+.hero-label{font-family:'Syne',sans-serif;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.hero-price{font-family:'Syne',sans-serif;font-size:2.8rem;font-weight:800;letter-spacing:-0.03em;color:var(--text);line-height:1}
+.hero-price sup{color:var(--accent);font-size:1.3rem;vertical-align:top;margin-top:5px;display:inline-block}
+.hero-sub{font-size:13px;color:var(--muted);margin-top:8px}
+
+.cards-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px}
+.card-label{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:5px;letter-spacing:0.04em;line-height:1.4}
+.card-val{font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:700;color:var(--text)}
+.card-val.accent{color:var(--accent)}
+.card-val.danger{color:var(--danger)}
+.card-val.warning{color:var(--accent3)}
+
+/* ─── BREAKDOWN TABLE ─── */
+.breakdown{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.breakdown-header{background:var(--surface2);padding:10px 16px;font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);display:grid;grid-template-columns:1fr auto auto;gap:16px}
+.breakdown-row{padding:11px 16px;display:grid;grid-template-columns:1fr auto auto;gap:16px;border-top:1px solid var(--border);font-size:13px;align-items:center;transition:background .1s}
+.breakdown-row:hover{background:var(--surface2)}
+.row-name{color:var(--text);line-height:1.4}
+.row-cat{font-family:'DM Mono',monospace;font-size:10px;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.cat-base{background:#00d4aa18;color:var(--accent)}
+.cat-var{background:#ffd16618;color:var(--accent3)}
+.cat-fixed{background:#ff6b3518;color:var(--accent2)}
+.cat-gain{background:#7c3aed18;color:#a78bfa}
+.row-amount{font-family:'DM Mono',monospace;font-weight:500;text-align:right;white-space:nowrap}
+.subtotal-row{padding:11px 16px;display:grid;grid-template-columns:1fr auto;gap:16px;border-top:1px solid var(--border);background:var(--surface2)}
+.subtotal-row .sub-label{font-weight:500;font-size:13px;color:var(--muted)}
+.subtotal-row .sub-val{font-family:'DM Mono',monospace;font-weight:700;font-size:14px;white-space:nowrap}
+.total-row{padding:14px 16px;display:grid;grid-template-columns:1fr auto;gap:16px;border-top:2px solid var(--accent);background:#00d4aa0a}
+.total-row .total-label{font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:var(--text)}
+.total-row .total-val{font-family:'Syne',sans-serif;font-weight:800;font-size:1.25rem;color:var(--accent);white-space:nowrap}
+
+/* ─── FUEL BADGE ─── */
+.fuel-live{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;margin-bottom:10px}
+.fuel-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex-shrink:0;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.4)}}
+.fuel-text{font-family:'DM Mono',monospace;font-size:12px;color:var(--muted)}
+.fuel-text strong{color:var(--accent3)}
+
+/* ─── TIP BOX ─── */
+.tip-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem;display:flex;align-items:flex-start;gap:10px}
+.tip-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.tip-title{font-size:12px;font-weight:500;margin-bottom:3px;color:var(--text);font-family:'Syne',sans-serif}
+.tip-body{font-size:12px;color:var(--muted);line-height:1.6}
+
+/* ─── FIXED SUMMARY ─── */
+.fixed-summary{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1rem 1.25rem}
+.fixed-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+.fixed-item .fi-label{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:3px}
+.fixed-item .fi-val{font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--text)}
+.fixed-total{margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.fixed-total .ft-label{font-size:13px;color:var(--muted);font-family:'DM Mono',monospace}
+.fixed-total .ft-val{font-family:'DM Mono',monospace;font-weight:700;font-size:15px}
+
+/* ─── EMPTY STATE ─── */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:400px;gap:12px;opacity:.5;text-align:center}
+.empty-icon{font-size:52px}
+.empty-title{font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--text)}
+.empty-sub{font-size:13px;color:var(--muted);font-family:'DM Mono',monospace}
+
+/* ─── HISTORY ─── */
+.history-section{margin-top:0.5rem}
+.history-item{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:8px;cursor:pointer;transition:all .15s;display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px}
+.history-item:hover{border-color:var(--accent);background:var(--surface2)}
+.history-item:active{transform:scale(0.99)}
+.hi-route{font-size:13px;font-weight:500;color:var(--text);margin-bottom:2px}
+.hi-meta{font-size:11px;color:var(--muted);font-family:'DM Mono',monospace}
+.hi-price{font-family:'Syne',sans-serif;font-weight:800;font-size:1.1rem;color:var(--accent);white-space:nowrap}
+.history-empty{text-align:center;padding:1.5rem;font-size:12px;color:var(--muted);font-family:'DM Mono',monospace;opacity:.6}
+.btn-clear-hist{background:transparent;border:1px solid #ff475733;color:var(--danger);font-size:11px;font-family:'DM Mono',monospace;padding:4px 10px;border-radius:6px;cursor:pointer;transition:all .15s}
+.btn-clear-hist:hover{background:#ff475718}
+
+/* ─── SHARE BUTTON ─── */
+.btn-share{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'Syne',sans-serif;font-weight:600;font-size:13px;padding:10px 16px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:all .15s;width:100%;justify-content:center}
+.btn-share:hover{border-color:var(--accent);color:var(--accent)}
+.btn-share:active{transform:scale(0.98)}
+
+/* ─── DIVIDER ─── */
+.divider{height:1px;background:var(--border);margin:0.5rem 0}
+
+/* ─── PRINT ─── */
+@media print{
+  .sidebar,.mobile-tabs,.header,.install-btn,.btn-calc,.btn-share{display:none!important}
+  .app{display:block}
+  .main{padding:0}
+  body{background:white;color:black}
+  .result-hero,.card,.breakdown{border-color:#ccc!important;background:white!important}
+}
+
+/* ─── RESPONSIVE ─── */
+@media(max-width:768px){
+  .app{grid-template-columns:1fr}
+  .mobile-tabs{display:block}
+  .sidebar{border-right:none;border-bottom:none}
+  .sidebar.hidden,.main.hidden{display:none}
+  .cards-grid{grid-template-columns:1fr 1fr}
+  .hero-price{font-size:2.2rem}
+  .breakdown-header .bh-type,.breakdown-row .row-cat{display:none}
+  .breakdown-header{grid-template-columns:1fr auto}
+  .breakdown-row{grid-template-columns:1fr auto}
+}
+@media(max-width:420px){
+  .sidebar,.main{padding:1rem}
+  .cards-grid{grid-template-columns:1fr}
+  .result-hero{padding:1rem}
+  .fixed-grid{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- OFFLINE BANNER -->
+<div class="offline-bar" id="offline-bar">
+  <span>⚡</span> Sin conexión — trabajando en modo offline
+</div>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="logo">Flota<span>Cost</span></div>
+  <div class="header-right">
+    <button class="install-btn" id="install-btn" onclick="installPWA()">⬇ Instalar app</button>
+    <span class="badge">v1.0</span>
+  </div>
+</header>
+
+<!-- MOBILE TABS -->
+<div class="mobile-tabs">
+  <div class="tab-row">
+    <button class="tab-btn active" id="tab-form" onclick="switchTab('form')">⚙ Configurar</button>
+    <button class="tab-btn" id="tab-results" onclick="switchTab('results')">📊 Resultado</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="app">
+
+  <!-- SIDEBAR / FORM -->
+  <aside class="sidebar" id="sidebar">
+
+    <!-- ROUTE -->
+    <div>
+      <div class="section-label">Ruta del viaje</div>
+      <div id="stops-list"></div>
+      <div style="display:flex;gap:8px;margin-top:6px;margin-bottom:10px">
+        <button class="btn-sm" onclick="addWaypoint()">+ Parada</button>
+        <button class="btn-sm" onclick="clearRoute()">✕ Limpiar</button>
+      </div>
+      <button class="btn-map" id="btn-maps" onclick="openGoogleMaps()" disabled>
+        <span>🗺️</span> Ver ruta en mapa
+      </button>
+    </div>
+
+    <!-- KM -->
+    <div>
+      <div class="section-label">Distancia y consumo</div>
+      
+      <!-- ROUNDTRIP TOGGLE -->
+      <div class="roundtrip-section">
+        <div class="roundtrip-header">
+          <span class="roundtrip-label">↔️ Ida y vuelta</span>
+          <label class="toggle">
+            <input type="checkbox" id="roundtrip-toggle" onchange="updateRoundtrip()">
+            <div class="toggle-track"></div>
+            <div class="toggle-thumb"></div>
+          </label>
+        </div>
+        <div class="roundtrip-info" id="roundtrip-info" style="display:none;">
+          Los km se multiplicarán por 2 automáticamente
+        </div>
+      </div>
+
+      <div class="field">
+        <label>KM totales</label>
+        <input type="number" id="km-input" placeholder="92" min="1" inputmode="decimal" oninput="updateRoundtrip()">
+      </div>
+
+      <div class="field" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;padding:8px;background:var(--surface2);border-radius:6px;border:1px solid var(--border)">
+        📊 <span id="km-display">KM a calcular: 0</span>
+      </div>
+    </div>
+
+    <!-- FUEL -->
+    <div>
+      <div class="section-label">Combustible</div>
+      <div class="fuel-live">
+        <div class="fuel-dot"></div>
+        <span class="fuel-text">Diésel: <strong id="diesel-display">$4.15</strong>/gal</span>
+      </div>
+      <div class="field">
+        <label>💧 Diésel $/gal</label>
+        <input type="number" id="diesel" step="0.01" value="4.15" inputmode="decimal" oninput="document.getElementById('diesel-display').textContent='$'+parseFloat(this.value||0).toFixed(2)">
+      </div>
+    </div>
+
+    <!-- VARIABLE COSTS -->
+    <div>
+      <div class="section-label">Costos variables (por viaje)</div>
+      <div class="field-row">
+        <div class="field">
+          <label>👨‍✈️ Motorista $</label>
+          <input type="number" id="motorista" value="20" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label>🔧 Imprevistos $</label>
+          <input type="number" id="imprevistos" value="20" inputmode="decimal">
+        </div>
+      </div>
+      <div class="field">
+        <label>🧹 Limpieza $</label>
+        <input type="number" id="limpieza" value="15" inputmode="decimal">
+      </div>
+    </div>
+
+    <!-- FIXED COSTS -->
+    <div>
+      <div class="section-label">Costos fijos (mensual)</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <span style="font-size:12px;color:var(--muted);font-family:'DM Mono',monospace">Prorratear por viaje</span>
+        <label class="toggle">
+          <input type="checkbox" id="include-fixed" checked>
+          <div class="toggle-track"></div>
+          <div class="toggle-thumb"></div>
+        </label>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>📋 Cuota $</label>
+          <input type="number" id="cuota" value="450" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label>🛡️ Seguro $</label>
+          <input type="number" id="seguro" value="194.97" inputmode="decimal">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>🔩 Mantenimiento $</label>
+          <input type="number" id="mantenimiento" value="186.16" inputmode="decimal">
+        </div>
+        <div class="field">
+          <label>📅 Viajes/mes</label>
+          <input type="number" id="viajes-mes" value="60" min="1" inputmode="numeric">
+        </div>
+      </div>
+    </div>
+
+    <!-- MARGIN -->
+    <div>
+      <div class="section-label">Margen de ganancia</div>
+      <div class="slider-wrap">
+        <div class="slider-header">
+          <label>Porcentaje de ganancia</label>
+          <span class="slider-val" id="margin-display">30%</span>
+        </div>
+        <input type="range" min="5" max="150" step="1" value="30" id="margin"
+          oninput="document.getElementById('margin-display').textContent=this.value+'%'">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>O ingresa % manualmente</label>
+          <input type="number" id="margin-manual" placeholder="30" min="0" max="999" inputmode="numeric"
+            oninput="syncMargin(this.value)">
+        </div>
+        <div class="field">
+          <label>Km base (costo/km)</label>
+          <input type="number" id="cost-per-km" value="0.48" step="0.01" inputmode="decimal">
+        </div>
+      </div>
+    </div>
+
+    <button class="btn-calc" onclick="calculate()">⚡ Calcular Precio del Viaje</button>
+
+    <!-- HISTORY -->
+    <div class="history-section">
+      <div class="section-label">Historial de cálculos</div>
+      <div id="history-list"></div>
+    </div>
+
+  </aside>
+
+  <!-- MAIN / RESULTS -->
+  <main class="main" id="main-results">
+    <div class="empty" id="empty-state">
+      <div class="empty-icon">🗺️</div>
+      <div class="empty-title">Sin resultados aún</div>
+      <div class="empty-sub">Completa los datos y presiona<br>⚡ Calcular Precio del Viaje</div>
+    </div>
+    <div id="results-content" style="display:none;display:flex;flex-direction:column;gap:1.5rem"></div>
+  </main>
+
+</div>
+
+<script>
+// ── STATE ──
+let stops = ['', ''];
+let history = JSON.parse(localStorage.getItem('fc_history') || '[]');
+let deferredPrompt = null;
+let baseKm = 0; // Almacena los km originales sin ida y vuelta
+
+// ── PWA INSTALL ──
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('install-btn').style.display = 'inline-block';
+});
+
+function installPWA() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(r => {
+    if (r.outcome === 'accepted') document.getElementById('install-btn').style.display = 'none';
+    deferredPrompt = null;
+  });
+}
+
+window.addEventListener('appinstalled', () => {
+  document.getElementById('install-btn').style.display = 'none';
+});
+
+// ── OFFLINE DETECTION ──
+function updateOnline() {
+  document.getElementById('offline-bar').classList.toggle('show', !navigator.onLine);
+}
+window.addEventListener('online', updateOnline);
+window.addEventListener('offline', updateOnline);
+updateOnline();
+
+// ── SERVICE WORKER ──
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  });
+}
+
+// ── MOBILE TABS ──
+function switchTab(tab) {
+  const sidebar = document.getElementById('sidebar');
+  const main = document.getElementById('main-results');
+  document.getElementById('tab-form').classList.toggle('active', tab === 'form');
+  document.getElementById('tab-results').classList.toggle('active', tab === 'results');
+  if (window.innerWidth <= 768) {
+    sidebar.classList.toggle('hidden', tab !== 'form');
+    main.classList.toggle('hidden', tab !== 'results');
+  }
+}
+
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 768) {
+    document.getElementById('sidebar').classList.remove('hidden');
+    document.getElementById('main-results').classList.remove('hidden');
+  }
+});
+
+// ── ROUNDTRIP UPDATE ──
+function updateRoundtrip() {
+  const kmInput = document.getElementById('km-input');
+  const roundtripToggle = document.getElementById('roundtrip-toggle');
+  const roundtripInfo = document.getElementById('roundtrip-info');
+  const kmDisplay = document.getElementById('km-display');
+
+  if (!kmInput.value) {
+    kmDisplay.textContent = 'KM a calcular: 0';
+    roundtripInfo.style.display = 'none';
+    return;
+  }
+
+  baseKm = parseFloat(kmInput.value) || 0;
+  let finalKm = baseKm;
+
+  if (roundtripToggle.checked) {
+    finalKm = baseKm * 2;
+    roundtripInfo.style.display = 'block';
+  } else {
+    roundtripInfo.style.display = 'none';
+  }
+
+  kmDisplay.textContent = `KM a calcular: ${finalKm} ${roundtripToggle.checked ? `(${baseKm} × 2)` : ''}`;
+}
+
+// ── STOPS ──
+function renderStops() {
+  const el = document.getElementById('stops-list');
+  el.innerHTML = '';
+  stops.forEach((s, i) => {
+    const isOrigin = i === 0;
+    const isDest = i === stops.length - 1;
+    const isWay = !isOrigin && !isDest;
+    const label = isOrigin ? 'A' : isDest ? 'B' : String.fromCharCode(65 + i);
+    const dotClass = isOrigin ? 'dot-origin' : isDest ? 'dot-dest' : 'dot-waypoint';
+    const placeholder = isOrigin ? 'Lugar de partida' : isDest ? 'Destino final' : 'Parada intermedia';
+
+    const row = document.createElement('div');
+    row.className = 'stop-row';
+    row.innerHTML = `
+      <div class="stop-dot ${dotClass}">${label}</div>
+      <input type="text" placeholder="${placeholder}" value="${escHtml(s)}"
+        oninput="stops[${i}]=this.value;updateMapButton()" autocomplete="off">
+      ${isWay ? `<button class="btn-del" onclick="removeStop(${i})" title="Eliminar parada">✕</button>` : ''}
+    `;
+    el.appendChild(row);
+
+    if (!isDest) {
+      const arrow = document.createElement('div');
+      arrow.style.cssText = 'text-align:center;color:var(--muted);font-size:10px;margin:-2px 0;padding-left:30px;font-family:DM Mono,monospace;opacity:.6';
+      arrow.textContent = '↓';
+      el.appendChild(arrow);
+    }
+  });
+  updateMapButton();
+}
+
+function addWaypoint() {
+  stops.splice(stops.length - 1, 0, '');
+  renderStops();
+}
+
+function removeStop(i) {
+  stops.splice(i, 1);
+  renderStops();
+}
+
+function clearRoute() {
+  stops = ['', ''];
+  renderStops();
+  document.getElementById('km-input').value = '';
+  document.getElementById('roundtrip-toggle').checked = false;
+  updateRoundtrip();
+  updateMapButton();
+}
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── UPDATE MAP BUTTON ──
+function updateMapButton() {
+  const origin = stops[0] || '';
+  const destination = stops[stops.length - 1] || '';
+  const btn = document.getElementById('btn-maps');
+  
+  if (origin.trim() && destination.trim()) {
+    btn.disabled = false;
+  } else {
+    btn.disabled = true;
+  }
+}
+
+// ── OPEN GOOGLE MAPS ──
+function openGoogleMaps() {
+  const origin = stops[0];
+  const destination = stops[stops.length - 1];
+  const waypoints = stops.slice(1, -1).filter(Boolean);
+
+  if (!origin || !destination) {
+    alert('Por favor ingresa el lugar de partida y el destino final');
+    return;
+  }
+
+  // Construir URL de Google Maps
+  let url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`;
+
+  // Agregar waypoints si existen
+  if (waypoints.length > 0) {
+    const waypointsStr = waypoints.map(wp => encodeURIComponent(wp)).join('|');
+    url += `&waypoints=${waypointsStr}`;
+  }
+
+  // Agregar modo de viaje como conducción
+  url += `&travelmode=driving`;
+
+  // Abrir en nueva pestaña
+  window.open(url, '_blank');
+}
+
+// ── MARGIN SYNC ──
+function syncMargin(val) {
+  const n = Math.min(150, Math.max(5, parseInt(val) || 5));
+  document.getElementById('margin').value = n;
+  document.getElementById('margin-display').textContent = n + '%';
+}
+
+// ── HELPERS ──
+function getVal(id) { return parseFloat(document.getElementById(id).value) || 0; }
+function f(n) { return '$' + Math.abs(n).toFixed(2); }
+function fSigned(n) { return (n >= 0 ? '+$' : '-$') + Math.abs(n).toFixed(2); }
+
+// ── CALCULATE ──
+function calculate() {
+  let km = getVal('km-input');
+  
+  // Aplicar multiplicador de ida y vuelta
+  const isRoundtrip = document.getElementById('roundtrip-toggle').checked;
+  if (isRoundtrip) {
+    km = km * 2;
+  }
+
+  if (!km || km <= 0) {
+    alert('Por favor ingresa los kilómetros del recorrido.');
+    return;
+  }
+
+  const fuelPrice = getVal('diesel');
+  const costPerKm = getVal('cost-per-km') || 0.48;
+
+  // Base
+  const costBase = km * costPerKm;
+  const gallons = km / 8;
+  const gasolineCost = gallons * fuelPrice;
+
+  // Variable
+  const motorista = getVal('motorista');
+  const imprevistos = getVal('imprevistos');
+  const limpieza = getVal('limpieza');
+  const totalVar = motorista + imprevistos + limpieza;
+
+  // Fixed
+  const includeFixed = document.getElementById('include-fixed').checked;
+  const cuota = getVal('cuota');
+  const seguro = getVal('seguro');
+  const mant = getVal('mantenimiento');
+  const viajesMes = getVal('viajes-mes') || 60;
+  const totalFixed = cuota + seguro + mant;
+  const fixedPerTrip = includeFixed ? totalFixed / viajesMes : 0;
+
+  // Margin
+  const margin = getVal('margin') || 30;
+
+  // Totals
+  const recommended = costBase * (1 + margin / 100);
+  const ganancia = recommended - costBase;
+  const redondeado = Math.ceil(recommended / 5) * 5;
+  const margenRedondeado = ((redondeado - costBase) / costBase * 100).toFixed(1);
+
+  // Route info
+  const origin = stops[0] || 'Origen';
+  const dest = stops[stops.length - 1] || 'Destino';
+  const waypoints = stops.slice(1, -1).filter(Boolean);
+  let routeStr = origin + (waypoints.length ? ' → ' + waypoints.join(' → ') : '') + ' → ' + dest;
+  if (isRoundtrip) {
+    routeStr += ' (ida y vuelta)';
+  }
+
+  // Save to history
+  const record = {
+    id: Date.now(),
+    route: `${origin} → ${dest}${isRoundtrip ? ' (ida y vuelta)' : ''}`,
+    km, recommended: recommended.toFixed(2),
+    date: new Date().toLocaleDateString('es-SV', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })
+  };
+  history.unshift(record);
+  if (history.length > 20) history.pop();
+  localStorage.setItem('fc_history', JSON.stringify(history));
+  renderHistory();
+
+  // Build result rows
+  const priceRows = [
+    { name: `Costo por kilometraje (${km} km × ${f(costPerKm)})${isRoundtrip ? ' [IDA Y VUELTA]' : ''}`, cat: 'base', catLabel: 'Base', val: costBase },
+    { name: `Ganancia (${margin}% sobre ${f(costBase)})`, cat: 'gain', catLabel: 'Ganancia', val: ganancia },
+  ];
+
+  // Costos informativos
+  const infoRows = [];
+  infoRows.push({ name: `Diésel (~${gallons.toFixed(2)} gal × ${f(fuelPrice)}/gal)`, cat: 'base', catLabel: 'Ref.', val: gasolineCost });
+  if (includeFixed) {
+    infoRows.push({ name: `Cuota mensual (${f(cuota)} ÷ ${viajesMes} viajes)`, cat: 'fixed', catLabel: 'Fijo', val: cuota / viajesMes });
+    infoRows.push({ name: `Seguro mensual (${f(seguro)} ÷ ${viajesMes} viajes)`, cat: 'fixed', catLabel: 'Fijo', val: seguro / viajesMes });
+    infoRows.push({ name: `Mantenimiento mensual (${f(mant)} ÷ ${viajesMes} viajes)`, cat: 'fixed', catLabel: 'Fijo', val: mant / viajesMes });
+  }
+  infoRows.push({ name: 'Pago motorista', cat: 'var', catLabel: 'Variable', val: motorista });
+  infoRows.push({ name: 'Imprevistos', cat: 'var', catLabel: 'Variable', val: imprevistos });
+  infoRows.push({ name: 'Limpieza', cat: 'var', catLabel: 'Variable', val: limpieza });
+
+  // Render
+  document.getElementById('empty-state').style.display = 'none';
+  const rc = document.getElementById('results-content');
+  rc.style.display = 'flex';
+
+  rc.innerHTML = `
+    <!-- HERO -->
+    <div class="result-hero">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px">
+        <div>
+          <div class="hero-label">Precio recomendado al cliente</div>
+          <div class="hero-price"><sup>$</sup>${recommended.toFixed(2)}</div>
+          <div class="hero-sub">Ganancia: <strong style="color:var(--accent3)">${margin}% = ${f(ganancia)}</strong> &nbsp;·&nbsp; Costo base (km): <strong style="color:var(--muted)">${f(costBase)}</strong></div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:4px;text-transform:uppercase;letter-spacing:.08em">Ruta</div>
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px">${escHtml(origin)}</div>
+          ${waypoints.length ? `<div style="font-size:11px;color:var(--muted);margin:2px 0;font-family:'DM Mono',monospace">+ ${waypoints.map(escHtml).join(' → ')}</div>` : ''}
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--accent2)">${escHtml(dest)}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);margin-top:5px">${km} km${isRoundtrip ? ' (ida y vuelta)' : ''} · 🚌 Microbus · Diésel</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARDS -->
+    <div class="cards-grid">
+      <div class="card">
+        <div class="card-label">Costo base<br>(${km}km × ${f(costPerKm)})</div>
+        <div class="card-val accent">${f(costBase)}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Combustible<br>(referencia, ${gallons.toFixed(1)} gal × ${f(fuelPrice)})</div>
+        <div class="card-val" style="color:var(--muted)">${f(gasolineCost)}</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Ganancia<br>(${margin}%)</div>
+        <div class="card-val" style="color:#a78bfa">${f(ganancia)}</div>
+      </div>
+    </div>
+
+    <!-- BREAKDOWN -->
+    <div class="breakdown">
+      <div class="breakdown-header">
+        <span>Concepto</span>
+        <span class="bh-type">Tipo</span>
+        <span>Monto</span>
+      </div>
+      ${priceRows.map(r => `
+        <div class="breakdown-row">
+          <span class="row-name">${r.name}</span>
+          <span class="row-cat cat-${r.cat}">${r.catLabel}</span>
+          <span class="row-amount">${f(r.val)}</span>
+        </div>
+      `).join('')}
+      <div class="total-row">
+        <span class="total-label">💰 Precio recomendado al cliente</span>
+        <span class="total-val">${f(recommended)}</span>
+      </div>
+    </div>
+
+    <!-- INFORMATIVE COSTS -->
+    <div class="breakdown">
+      <div class="breakdown-header" style="background:var(--surface3)">
+        <span>Costos adicionales (referencia informativa — no incluidos en el precio)</span>
+        <span class="bh-type">Tipo</span>
+        <span>Monto</span>
+      </div>
+      ${infoRows.map(r => `
+        <div class="breakdown-row" style="opacity:.75">
+          <span class="row-name">${r.name}</span>
+          <span class="row-cat cat-${r.cat}">${r.catLabel}</span>
+          <span class="row-amount">${f(r.val)}</span>
+        </div>
+      `).join('')}
+      <div class="subtotal-row">
+        <span class="sub-label">Total costos adicionales (referencia)</span>
+        <span class="sub-val" style="color:var(--muted)">${f(gasolineCost + totalVar + fixedPerTrip)}</span>
+      </div>
+    </div>
+
+    <!-- TIP BOX -->
+    <div class="tip-box">
+      <span class="tip-icon">💡</span>
+      <div>
+        <div class="tip-title">Consejo de precio</div>
+        <div class="tip-body">
+          El precio se calcula sobre el costo base por kilometraje (${f(costBase)}) con ${margin}% de ganancia = <strong style="color:var(--accent)">${f(recommended)}</strong>.
+          Para facilitar cobros, podés redondear a <strong style="color:var(--accent3)">${f(redondeado)}</strong> y tu margen sube a <strong style="color:var(--accent3)">${margenRedondeado}%</strong>.
+          Los costos de combustible, motorista, fijos e imprevistos se muestran abajo como referencia.
+        </div>
+      </div>
+    </div>
+
+    ${includeFixed ? `
+    <!-- FIXED SUMMARY -->
+    <div class="fixed-summary">
+      <div class="section-label" style="margin-bottom:0">Gastos fijos mensuales de referencia</div>
+      <div class="fixed-grid">
+        <div class="fixed-item"><div class="fi-label">Cuota</div><div class="fi-val">${f(cuota)}</div></div>
+        <div class="fixed-item"><div class="fi-label">Seguro</div><div class="fi-val">${f(seguro)}</div></div>
+        <div class="fixed-item"><div class="fi-label">Mantenimiento</div><div class="fi-val">${f(mant)}</div></div>
+      </div>
+      <div class="fixed-total">
+        <span class="ft-label">Total mensual</span>
+        <span class="ft-val">${f(totalFixed)}</span>
+      </div>
+    </div>` : ''}
+
+    <!-- SHARE -->
+    <button class="btn-share" onclick="shareResult('${escHtml(routeStr)}','${recommended.toFixed(2)}','${km}','${margin}')">
+      📤 Compartir resultado
+    </button>
+  `;
+
+  // On mobile, switch to results tab
+  if (window.innerWidth <= 768) switchTab('results');
+}
+
+// ── SHARE ──
+function shareResult(route, price, km, margin) {
+  const text = `🚌 FlotaCost — Cotización de Viaje\n\n📍 Ruta: ${route}\n📏 Distancia: ${km} km\n💰 Precio recomendado: $${price}\n📈 Margen: ${margin}%\n\nCalculado con FlotaCost`;
+  if (navigator.share) {
+    navigator.share({ title: 'Cotización de Viaje — FlotaCost', text });
+  } else {
+    navigator.clipboard.writeText(text).then(() => alert('Cotización copiada al portapapeles ✓'));
+  }
+}
+
+// ── HISTORY ──
+function renderHistory() {
+  const el = document.getElementById('history-list');
+  if (!history.length) {
+    el.innerHTML = '<div class="history-empty">Aún no hay cálculos guardados</div>';
+    return;
+  }
+  el.innerHTML = `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+      <button class="btn-clear-hist" onclick="clearHistory()">Borrar historial</button>
+    </div>
+    ${history.slice(0, 8).map(h => `
+      <div class="history-item" onclick="loadHistory('${h.id}')">
+        <div>
+          <div class="hi-route">${escHtml(h.route)}</div>
+          <div class="hi-meta">${h.km} km · ${h.date}</div>
+        </div>
+        <div class="hi-price">$${h.recommended}</div>
+      </div>
+    `).join('')}
+  `;
+}
+
+function clearHistory() {
+  if (confirm('¿Borrar todo el historial de cálculos?')) {
+    history = [];
+    localStorage.removeItem('fc_history');
+    renderHistory();
+  }
+}
+
+function loadHistory(id) {
+  // History is read-only display; user can recalculate
+}
+
+// ── INIT ──
+function init() {
+  renderStops();
+  renderHistory();
+}
+
+init();
+</script>
+</body>
+</html>
