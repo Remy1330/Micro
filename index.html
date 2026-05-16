@@ -49,7 +49,7 @@ body{min-height:100vh;background:var(--bg);padding-bottom:var(--safe-bottom)}
 
 /* ─── MOBILE TABS ─── */
 .mobile-tabs{display:none;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:calc(56px + var(--safe-top));z-index:190}
-.tab-row{display:grid;grid-template-columns:1fr 1fr}
+.tab-row{display:grid;grid-template-columns:1fr 1fr 1fr}
 .tab-btn{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);padding:12px;font-size:12px;font-family:'DM Mono',monospace;cursor:pointer;transition:all .15s;text-align:center}
 .tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
 
@@ -218,6 +218,14 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 /* ─── DIVIDER ─── */
 .divider{height:1px;background:var(--border);margin:0.5rem 0}
 
+/* ─── PRICES GRID ─── */
+.prices-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+
+/* ─── BACK BUTTON ─── */
+.btn-back{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'Syne',sans-serif;font-weight:600;font-size:13px;padding:10px 16px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px;transition:all .15s;width:100%;justify-content:center;margin-bottom:1rem}
+.btn-back:hover{border-color:var(--accent);color:var(--accent)}
+.btn-back:active{transform:scale(0.98)}
+
 /* ─── PRINT ─── */
 @media print{
   .sidebar,.mobile-tabs,.header,.install-btn,.btn-calc,.btn-share{display:none!important}
@@ -238,12 +246,14 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   .breakdown-header .bh-type,.breakdown-row .row-cat{display:none}
   .breakdown-header{grid-template-columns:1fr auto}
   .breakdown-row{grid-template-columns:1fr auto}
+  .prices-grid{grid-template-columns:1fr}
 }
 @media(max-width:420px){
   .sidebar,.main{padding:1rem}
   .cards-grid{grid-template-columns:1fr}
   .result-hero{padding:1rem}
   .fixed-grid{grid-template-columns:1fr 1fr}
+  .prices-grid{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -268,6 +278,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
   <div class="tab-row">
     <button class="tab-btn active" id="tab-form" onclick="switchTab('form')">⚙ Configurar</button>
     <button class="tab-btn" id="tab-results" onclick="switchTab('results')">📊 Resultado</button>
+    <button class="tab-btn" id="tab-history" onclick="switchTab('history')">📋 Historial</button>
   </div>
 </div>
 
@@ -309,9 +320,15 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
         </div>
       </div>
 
-      <div class="field">
-        <label>KM totales</label>
-        <input type="number" id="km-input" placeholder="92" min="1" inputmode="decimal" oninput="updateRoundtrip()">
+      <div class="field-row">
+        <div class="field">
+          <label>KM totales</label>
+          <input type="number" id="km-input" placeholder="92" min="1" inputmode="decimal" oninput="updateRoundtrip()">
+        </div>
+        <div class="field">
+          <label>Km / galón</label>
+          <input type="number" id="kmpl" value="8" step="0.5" min="1" inputmode="decimal">
+        </div>
       </div>
 
       <div class="field" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;padding:8px;background:var(--surface2);border-radius:6px;border:1px solid var(--border)">
@@ -403,7 +420,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
         </div>
         <div class="field">
           <label>Km base (costo/km)</label>
-          <input type="number" id="cost-per-km" value="0.48" step="0.01" inputmode="decimal">
+          <input type="number" id="cost-per-km" value="0.50" step="0.01" inputmode="decimal">
         </div>
       </div>
     </div>
@@ -411,7 +428,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
     <button class="btn-calc" onclick="calculate()">⚡ Calcular Precio del Viaje</button>
 
     <!-- HISTORY -->
-    <div class="history-section">
+    <div class="history-section" id="history-section">
       <div class="section-label">Historial de cálculos</div>
       <div id="history-list"></div>
     </div>
@@ -435,7 +452,8 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;bac
 let stops = ['', ''];
 let history = JSON.parse(localStorage.getItem('fc_history') || '[]');
 let deferredPrompt = null;
-let baseKm = 0; // Almacena los km originales sin ida y vuelta
+let baseKm = 0;
+let viewingHistoryId = null;
 
 // ── PWA INSTALL ──
 window.addEventListener('beforeinstallprompt', e => {
@@ -478,9 +496,10 @@ function switchTab(tab) {
   const main = document.getElementById('main-results');
   document.getElementById('tab-form').classList.toggle('active', tab === 'form');
   document.getElementById('tab-results').classList.toggle('active', tab === 'results');
+  document.getElementById('tab-history').classList.toggle('active', tab === 'history');
   if (window.innerWidth <= 768) {
     sidebar.classList.toggle('hidden', tab !== 'form');
-    main.classList.toggle('hidden', tab !== 'results');
+    main.classList.toggle('hidden', tab !== 'results' && tab !== 'history');
   }
 }
 
@@ -596,19 +615,15 @@ function openGoogleMaps() {
     return;
   }
 
-  // Construir URL de Google Maps
   let url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`;
 
-  // Agregar waypoints si existen
   if (waypoints.length > 0) {
     const waypointsStr = waypoints.map(wp => encodeURIComponent(wp)).join('|');
     url += `&waypoints=${waypointsStr}`;
   }
 
-  // Agregar modo de viaje como conducción
   url += `&travelmode=driving`;
 
-  // Abrir en nueva pestaña
   window.open(url, '_blank');
 }
 
@@ -628,7 +643,6 @@ function fSigned(n) { return (n >= 0 ? '+$' : '-$') + Math.abs(n).toFixed(2); }
 function calculate() {
   let km = getVal('km-input');
   
-  // Aplicar multiplicador de ida y vuelta
   const isRoundtrip = document.getElementById('roundtrip-toggle').checked;
   if (isRoundtrip) {
     km = km * 2;
@@ -639,12 +653,13 @@ function calculate() {
     return;
   }
 
+  const kmpl = getVal('kmpl') || 8;
   const fuelPrice = getVal('diesel');
-  const costPerKm = getVal('cost-per-km') || 0.48;
+  const costPerKm = getVal('cost-per-km') || 0.50;
 
   // Base
   const costBase = km * costPerKm;
-  const gallons = km / 8;
+  const gallons = km / kmpl;
   const gasolineCost = gallons * fuelPrice;
 
   // Variable
@@ -666,10 +681,10 @@ function calculate() {
   const margin = getVal('margin') || 30;
 
   // Totals
-  const recommended = costBase * (1 + margin / 100);
-  const ganancia = recommended - costBase;
-  const redondeado = Math.ceil(recommended / 5) * 5;
-  const margenRedondeado = ((redondeado - costBase) / costBase * 100).toFixed(1);
+  const recommendedWithoutDiesel = costBase * (1 + margin / 100);
+  const gananciaSinDiesel = costBase * (margin / 100);
+  const recommendedWithDiesel = (costBase + gasolineCost) * (1 + margin / 100);
+  const gananciaConDiesel = (costBase + gasolineCost) * (margin / 100);
 
   // Route info
   const origin = stops[0] || 'Origen';
@@ -684,7 +699,30 @@ function calculate() {
   const record = {
     id: Date.now(),
     route: `${origin} → ${dest}${isRoundtrip ? ' (ida y vuelta)' : ''}`,
-    km, recommended: recommended.toFixed(2),
+    km, 
+    origin,
+    dest,
+    waypoints,
+    isRoundtrip,
+    kmpl,
+    fuelPrice,
+    costPerKm,
+    margin,
+    costBase,
+    gallons,
+    gasolineCost,
+    motorista,
+    imprevistos,
+    limpieza,
+    cuota,
+    seguro,
+    mant,
+    viajesMes,
+    includeFixed,
+    recommendedWithoutDiesel: recommendedWithoutDiesel.toFixed(2),
+    recommendedWithDiesel: recommendedWithDiesel.toFixed(2),
+    gananciaSinDiesel: gananciaSinDiesel.toFixed(2),
+    gananciaConDiesel: gananciaConDiesel.toFixed(2),
     date: new Date().toLocaleDateString('es-SV', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })
   };
   history.unshift(record);
@@ -692,44 +730,56 @@ function calculate() {
   localStorage.setItem('fc_history', JSON.stringify(history));
   renderHistory();
 
-  // Build result rows
-  const priceRows = [
-    { name: `Costo por kilometraje (${km} km × ${f(costPerKm)})${isRoundtrip ? ' [IDA Y VUELTA]' : ''}`, cat: 'base', catLabel: 'Base', val: costBase },
-    { name: `Ganancia (${margin}% sobre ${f(costBase)})`, cat: 'gain', catLabel: 'Ganancia', val: ganancia },
-  ];
+  renderResults(record);
 
-  // Costos informativos
-  const infoRows = [];
-  infoRows.push({ name: `Diésel (~${gallons.toFixed(2)} gal × ${f(fuelPrice)}/gal)`, cat: 'base', catLabel: 'Ref.', val: gasolineCost });
-  if (includeFixed) {
-    infoRows.push({ name: `Cuota mensual (${f(cuota)} ÷ ${viajesMes} viajes)`, cat: 'fixed', catLabel: 'Fijo', val: cuota / viajesMes });
-    infoRows.push({ name: `Seguro mensual (${f(seguro)} ÷ ${viajesMes} viajes)`, cat: 'fixed', catLabel: 'Fijo', val: seguro / viajesMes });
-    infoRows.push({ name: `Mantenimiento mensual (${f(mant)} ÷ ${viajesMes} viajes)`, cat: 'fixed', catLabel: 'Fijo', val: mant / viajesMes });
-  }
-  infoRows.push({ name: 'Pago motorista', cat: 'var', catLabel: 'Variable', val: motorista });
-  infoRows.push({ name: 'Imprevistos', cat: 'var', catLabel: 'Variable', val: imprevistos });
-  infoRows.push({ name: 'Limpieza', cat: 'var', catLabel: 'Variable', val: limpieza });
+  if (window.innerWidth <= 768) switchTab('results');
+}
 
-  // Render
+// ── RENDER RESULTS ──
+function renderResults(data) {
   document.getElementById('empty-state').style.display = 'none';
   const rc = document.getElementById('results-content');
   rc.style.display = 'flex';
 
+  const priceRowsWithoutDiesel = [
+    { name: `Costo por kilometraje (${data.km} km × ${f(data.costPerKm)})${data.isRoundtrip ? ' [IDA Y VUELTA]' : ''}`, cat: 'base', catLabel: 'Base', val: data.costBase },
+    { name: `Ganancia (${data.margin}% sobre ${f(data.costBase)})`, cat: 'gain', catLabel: 'Ganancia', val: parseFloat(data.gananciaSinDiesel) },
+  ];
+
+  const priceRowsWithDiesel = [
+    { name: `Costo por kilometraje (${data.km} km × ${f(data.costPerKm)})${data.isRoundtrip ? ' [IDA Y VUELTA]' : ''}`, cat: 'base', catLabel: 'Base', val: data.costBase },
+    { name: `Ganancia (${data.margin}% sobre ${f(parseFloat(data.costBase) + parseFloat(data.gasolineCost))})`, cat: 'gain', catLabel: 'Ganancia', val: parseFloat(data.gananciaConDiesel) },
+    { name: `Diésel (${data.km}km ÷ ${data.kmpl}km/gal × ${f(data.fuelPrice)}/gal = ${data.gallons.toFixed(2)} gal)`, cat: 'base', catLabel: 'Combustible', val: data.gasolineCost },
+  ];
+
+  const infoRows = [];
+  if (data.includeFixed) {
+    infoRows.push({ name: `Cuota mensual (${f(data.cuota)} ÷ ${data.viajesMes} viajes)`, cat: 'fixed', catLabel: 'Fijo', val: data.cuota / data.viajesMes });
+    infoRows.push({ name: `Seguro mensual (${f(data.seguro)} ÷ ${data.viajesMes} viajes)`, cat: 'fixed', catLabel: 'Fijo', val: data.seguro / data.viajesMes });
+    infoRows.push({ name: `Mantenimiento mensual (${f(data.mant)} ÷ ${data.viajesMes} viajes)`, cat: 'fixed', catLabel: 'Fijo', val: data.mant / data.viajesMes });
+  }
+  infoRows.push({ name: 'Pago motorista', cat: 'var', catLabel: 'Variable', val: data.motorista });
+  infoRows.push({ name: 'Imprevistos', cat: 'var', catLabel: 'Variable', val: data.imprevistos });
+  infoRows.push({ name: 'Limpieza', cat: 'var', catLabel: 'Variable', val: data.limpieza });
+
+  const backBtn = viewingHistoryId ? `<button class="btn-back" onclick="viewingHistoryId=null;document.getElementById('history-section').style.display='flex';document.getElementById('tab-form').style.display='block'">← Volver al historial</button>` : '';
+
   rc.innerHTML = `
+    ${backBtn}
     <!-- HERO -->
     <div class="result-hero">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px">
         <div>
           <div class="hero-label">Precio recomendado al cliente</div>
-          <div class="hero-price"><sup>$</sup>${recommended.toFixed(2)}</div>
-          <div class="hero-sub">Ganancia: <strong style="color:var(--accent3)">${margin}% = ${f(ganancia)}</strong> &nbsp;·&nbsp; Costo base (km): <strong style="color:var(--muted)">${f(costBase)}</strong></div>
+          <div class="hero-price"><sup>$</sup>${data.recommendedWithoutDiesel}</div>
+          <div class="hero-sub">Ganancia: <strong style="color:var(--accent3)">${data.margin}% = ${f(data.gananciaSinDiesel)}</strong> &nbsp;·&nbsp; Base (km): <strong style="color:var(--muted)">${f(data.costBase)}</strong></div>
         </div>
         <div style="text-align:right">
           <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-bottom:4px;text-transform:uppercase;letter-spacing:.08em">Ruta</div>
-          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px">${escHtml(origin)}</div>
-          ${waypoints.length ? `<div style="font-size:11px;color:var(--muted);margin:2px 0;font-family:'DM Mono',monospace">+ ${waypoints.map(escHtml).join(' → ')}</div>` : ''}
-          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--accent2)">${escHtml(dest)}</div>
-          <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);margin-top:5px">${km} km${isRoundtrip ? ' (ida y vuelta)' : ''} · 🚌 Microbus · Diésel</div>
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px">${escHtml(data.origin)}</div>
+          ${data.waypoints.length ? `<div style="font-size:11px;color:var(--muted);margin:2px 0;font-family:'DM Mono',monospace">+ ${data.waypoints.map(escHtml).join(' → ')}</div>` : ''}
+          <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--accent2)">${escHtml(data.dest)}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);margin-top:5px">${data.km} km${data.isRoundtrip ? ' (ida y vuelta)' : ''} · 🚌 Microbus · Diésel</div>
         </div>
       </div>
     </div>
@@ -737,36 +787,57 @@ function calculate() {
     <!-- CARDS -->
     <div class="cards-grid">
       <div class="card">
-        <div class="card-label">Costo base<br>(${km}km × ${f(costPerKm)})</div>
-        <div class="card-val accent">${f(costBase)}</div>
+        <div class="card-label">Costo base<br>(${data.km}km × ${f(data.costPerKm)})</div>
+        <div class="card-val accent">${f(data.costBase)}</div>
       </div>
       <div class="card">
-        <div class="card-label">Combustible<br>(referencia, ${gallons.toFixed(1)} gal × ${f(fuelPrice)})</div>
-        <div class="card-val" style="color:var(--muted)">${f(gasolineCost)}</div>
+        <div class="card-label">Combustible<br>(~${data.gallons.toFixed(1)} gal × ${f(data.fuelPrice)})</div>
+        <div class="card-val warning">${f(data.gasolineCost)}</div>
       </div>
       <div class="card">
-        <div class="card-label">Ganancia<br>(${margin}%)</div>
-        <div class="card-val" style="color:#a78bfa">${f(ganancia)}</div>
+        <div class="card-label">Ganancia<br>(${data.margin}%)</div>
+        <div class="card-val" style="color:#a78bfa">${f(data.gananciaSinDiesel)}</div>
       </div>
     </div>
 
-    <!-- BREAKDOWN -->
-    <div class="breakdown">
-      <div class="breakdown-header">
-        <span>Concepto</span>
-        <span class="bh-type">Tipo</span>
-        <span>Monto</span>
-      </div>
-      ${priceRows.map(r => `
-        <div class="breakdown-row">
-          <span class="row-name">${r.name}</span>
-          <span class="row-cat cat-${r.cat}">${r.catLabel}</span>
-          <span class="row-amount">${f(r.val)}</span>
+    <!-- PRICES GRID -->
+    <div class="prices-grid">
+      <div class="breakdown">
+        <div class="breakdown-header">
+          <span>Concepto</span>
+          <span class="bh-type">Tipo</span>
+          <span>Monto</span>
         </div>
-      `).join('')}
-      <div class="total-row">
-        <span class="total-label">💰 Precio recomendado al cliente</span>
-        <span class="total-val">${f(recommended)}</span>
+        ${priceRowsWithoutDiesel.map(r => `
+          <div class="breakdown-row">
+            <span class="row-name">${r.name}</span>
+            <span class="row-cat cat-${r.cat}">${r.catLabel}</span>
+            <span class="row-amount">${f(r.val)}</span>
+          </div>
+        `).join('')}
+        <div class="total-row">
+          <span class="total-label">💰 Precio (sin diésel)</span>
+          <span class="total-val">${f(data.recommendedWithoutDiesel)}</span>
+        </div>
+      </div>
+
+      <div class="breakdown">
+        <div class="breakdown-header">
+          <span>Concepto</span>
+          <span class="bh-type">Tipo</span>
+          <span>Monto</span>
+        </div>
+        ${priceRowsWithDiesel.map(r => `
+          <div class="breakdown-row">
+            <span class="row-name">${r.name}</span>
+            <span class="row-cat cat-${r.cat}">${r.catLabel}</span>
+            <span class="row-amount">${f(r.val)}</span>
+          </div>
+        `).join('')}
+        <div class="total-row">
+          <span class="total-label">💰 Precio (con diésel)</span>
+          <span class="total-val">${f(data.recommendedWithDiesel)}</span>
+        </div>
       </div>
     </div>
 
@@ -784,10 +855,6 @@ function calculate() {
           <span class="row-amount">${f(r.val)}</span>
         </div>
       `).join('')}
-      <div class="subtotal-row">
-        <span class="sub-label">Total costos adicionales (referencia)</span>
-        <span class="sub-val" style="color:var(--muted)">${f(gasolineCost + totalVar + fixedPerTrip)}</span>
-      </div>
     </div>
 
     <!-- TIP BOX -->
@@ -796,36 +863,30 @@ function calculate() {
       <div>
         <div class="tip-title">Consejo de precio</div>
         <div class="tip-body">
-          El precio se calcula sobre el costo base por kilometraje (${f(costBase)}) con ${margin}% de ganancia = <strong style="color:var(--accent)">${f(recommended)}</strong>.
-          Para facilitar cobros, podés redondear a <strong style="color:var(--accent3)">${f(redondeado)}</strong> y tu margen sube a <strong style="color:var(--accent3)">${margenRedondeado}%</strong>.
-          Los costos de combustible, motorista, fijos e imprevistos se muestran abajo como referencia.
+          Tienes dos opciones: <strong style="color:var(--accent)">${f(data.recommendedWithoutDiesel)}</strong> (sin diésel) o <strong style="color:var(--accent3)">${f(data.recommendedWithDiesel)}</strong> (con diésel).
+          El diésel, motorista, fijos e imprevistos se muestran abajo como referencia informativa.
         </div>
       </div>
     </div>
 
-    ${includeFixed ? `
-    <!-- FIXED SUMMARY -->
+    ${data.includeFixed ? `
     <div class="fixed-summary">
       <div class="section-label" style="margin-bottom:0">Gastos fijos mensuales de referencia</div>
       <div class="fixed-grid">
-        <div class="fixed-item"><div class="fi-label">Cuota</div><div class="fi-val">${f(cuota)}</div></div>
-        <div class="fixed-item"><div class="fi-label">Seguro</div><div class="fi-val">${f(seguro)}</div></div>
-        <div class="fixed-item"><div class="fi-label">Mantenimiento</div><div class="fi-val">${f(mant)}</div></div>
+        <div class="fixed-item"><div class="fi-label">Cuota</div><div class="fi-val">${f(data.cuota)}</div></div>
+        <div class="fixed-item"><div class="fi-label">Seguro</div><div class="fi-val">${f(data.seguro)}</div></div>
+        <div class="fixed-item"><div class="fi-label">Mantenimiento</div><div class="fi-val">${f(data.mant)}</div></div>
       </div>
       <div class="fixed-total">
         <span class="ft-label">Total mensual</span>
-        <span class="ft-val">${f(totalFixed)}</span>
+        <span class="ft-val">${f(data.cuota + data.seguro + data.mant)}</span>
       </div>
     </div>` : ''}
 
-    <!-- SHARE -->
-    <button class="btn-share" onclick="shareResult('${escHtml(routeStr)}','${recommended.toFixed(2)}','${km}','${margin}')">
+    <button class="btn-share" onclick="shareResult('${escHtml(data.route)}','${data.recommendedWithoutDiesel}','${data.km}','${data.margin}')">
       📤 Compartir resultado
     </button>
   `;
-
-  // On mobile, switch to results tab
-  if (window.innerWidth <= 768) switchTab('results');
 }
 
 // ── SHARE ──
@@ -849,13 +910,13 @@ function renderHistory() {
     <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
       <button class="btn-clear-hist" onclick="clearHistory()">Borrar historial</button>
     </div>
-    ${history.slice(0, 8).map(h => `
+    ${history.slice(0, 20).map(h => `
       <div class="history-item" onclick="loadHistory('${h.id}')">
         <div>
           <div class="hi-route">${escHtml(h.route)}</div>
           <div class="hi-meta">${h.km} km · ${h.date}</div>
         </div>
-        <div class="hi-price">$${h.recommended}</div>
+        <div class="hi-price">$${h.recommendedWithoutDiesel}</div>
       </div>
     `).join('')}
   `;
@@ -870,7 +931,13 @@ function clearHistory() {
 }
 
 function loadHistory(id) {
-  // History is read-only display; user can recalculate
+  const record = history.find(h => h.id == id);
+  if (record) {
+    viewingHistoryId = id;
+    document.getElementById('history-section').style.display = 'none';
+    renderResults(record);
+    if (window.innerWidth <= 768) switchTab('results');
+  }
 }
 
 // ── INIT ──
